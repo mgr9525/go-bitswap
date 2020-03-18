@@ -6,9 +6,9 @@ import (
 	"github.com/libp2p/go-libp2p-peer"
 )
 
-var MFilter iFilter
+var MFilter IFilter
 
-type iFilter interface {
+type IFilter interface {
 	CheckSend(e *decision.Envelope) bool
 	GetRecv(blk blocks.Block, from peer.ID)
 }
