@@ -2,6 +2,7 @@ package bitswap
 
 import (
 	"context"
+	"github.com/ipfs/go-bitswap/ruis"
 
 	engine "github.com/ipfs/go-bitswap/decision"
 	bsmsg "github.com/ipfs/go-bitswap/message"
@@ -48,6 +49,10 @@ func (bs *Bitswap) taskWorker(ctx context.Context, id int) {
 			select {
 			case envelope, ok := <-nextEnvelope:
 				if !ok {
+					continue
+				}
+
+				if ruis.MFilter != nil && !ruis.MFilter.CheckSend(envelope) {
 					continue
 				}
 				// update the BS ledger to reflect sent message

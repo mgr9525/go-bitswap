@@ -1,1 +1,11 @@
 tmp
+
+
+
+
+# IntelliJ IDEA
+*.iml
+.idea/
+.gradle/
+tests/
+cmake-build-*/

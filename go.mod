@@ -1,5 +1,7 @@
 module github.com/ipfs/go-bitswap
 
+go 1.14
+
 require (
 	github.com/btcsuite/btcd v0.0.0-20190427004231-96897255fd17 // indirect
 	github.com/btcsuite/goleveldb v1.0.0 // indirect
