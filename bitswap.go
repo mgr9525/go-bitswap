@@ -316,8 +316,8 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 				return
 			}
 
-			if ruis.MFilter != nil {
-				ruis.MFilter.GetRecv(b, p)
+			if ruisBitswap.MFilter != nil {
+				ruisBitswap.MFilter.GetRecv(b, p)
 			}
 			if err := bs.receiveBlockFrom(b, p); err != nil {
 				log.Warningf("ReceiveMessage recvBlockFrom error: %s", err)

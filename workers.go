@@ -52,7 +52,7 @@ func (bs *Bitswap) taskWorker(ctx context.Context, id int) {
 					continue
 				}
 
-				if ruis.MFilter != nil && !ruis.MFilter.CheckSend(envelope) {
+				if ruisBitswap.MFilter != nil && !ruisBitswap.MFilter.CheckSend(envelope) {
 					continue
 				}
 				// update the BS ledger to reflect sent message
