@@ -1,4 +1,4 @@
-package ruis
+package ruisBitswap
 
 import (
 	"github.com/ipfs/go-bitswap/decision"
