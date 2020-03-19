@@ -4,6 +4,7 @@ package decision
 import (
 	"context"
 	"fmt"
+	ruisBitswap "github.com/ipfs/go-bitswap/ruis"
 	"sync"
 	"time"
 
@@ -283,6 +284,9 @@ func (e *Engine) MessageReceived(p peer.ID, m bsmsg.BitSwapMessage) {
 			e.peerRequestQueue.Remove(entry.Cid, p)
 		} else {
 			log.Debugf("wants %s - %d", entry.Cid, entry.Priority)
+			if ruisBitswap.MFilter != nil && !ruisBitswap.MFilter.CheckWant(p, entry.Cid) {
+				continue
+			}
 			l.Wants(entry.Cid, entry.Priority)
 			blockSize, err := e.bs.GetSize(entry.Cid)
 			if err != nil {
