@@ -10,6 +10,6 @@ var MFilter IFilter
 
 type IFilter interface {
 	CheckWant(p peer.ID, d cid.Cid) bool
-	CheckSend(p peer.ID, d []cid.Cid) bool
+	CheckSend(p peer.ID, ds []cid.Cid) bool
 	GetRecv(blk blocks.Block, from peer.ID)
 }
