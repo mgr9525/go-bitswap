@@ -52,9 +52,15 @@ func (bs *Bitswap) taskWorker(ctx context.Context, id int) {
 					continue
 				}
 
-				if ruisBitswap.MFilter != nil && !ruisBitswap.MFilter.CheckSend(envelope) {
-					envelope.Sent()
-					continue
+				if ruisBitswap.MFilter != nil {
+					cids := make([]cid.Cid, 0)
+					for _, block := range envelope.Message.Blocks() {
+						cids = append(cids, block.Cid())
+					}
+					if !ruisBitswap.MFilter.CheckSend(envelope.Peer, cids) {
+						envelope.Sent()
+						continue
+					}
 				}
 				// update the BS ledger to reflect sent message
 				// TODO: Should only track *useful* messages in ledger
