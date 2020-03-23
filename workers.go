@@ -51,17 +51,6 @@ func (bs *Bitswap) taskWorker(ctx context.Context, id int) {
 				if !ok {
 					continue
 				}
-
-				if ruisBitswap.MFilter != nil {
-					cids := make([]cid.Cid, 0)
-					for _, block := range envelope.Message.Blocks() {
-						cids = append(cids, block.Cid())
-					}
-					if !ruisBitswap.MFilter.CheckSend(envelope.Peer, cids) {
-						envelope.Sent()
-						continue
-					}
-				}
 				// update the BS ledger to reflect sent message
 				// TODO: Should only track *useful* messages in ledger
 				outgoing := bsmsg.New(false)
@@ -73,6 +62,7 @@ func (bs *Bitswap) taskWorker(ctx context.Context, id int) {
 							"Block":  block.Cid().String(),
 						}
 					}))
+
 					outgoing.AddBlock(block)
 				}
 				bs.engine.MessageSent(envelope.Peer, outgoing)
@@ -101,9 +91,17 @@ func (bs *Bitswap) sendBlocks(ctx context.Context, env *engine.Envelope) {
 	msgSize := 0
 	msg := bsmsg.New(false)
 	for _, block := range env.Message.Blocks() {
-		msgSize += len(block.RawData())
-		msg.AddBlock(block)
-		log.Infof("Sending block %s to %s", block, env.Peer)
+		if ruisBitswap.MFilter != nil {
+			if ruisBitswap.MFilter.CheckSend(env.Peer, block.Cid()) {
+				msgSize += len(block.RawData())
+				msg.AddBlock(block)
+				log.Infof("Sending block %s to %s", block, env.Peer)
+			}
+		} else {
+			msgSize += len(block.RawData())
+			msg.AddBlock(block)
+			log.Infof("Sending block %s to %s", block, env.Peer)
+		}
 	}
 
 	bs.sentHistogram.Observe(float64(msgSize))
