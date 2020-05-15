@@ -4,6 +4,7 @@ package decision
 import (
 	"context"
 	"fmt"
+	ruisBitswap "github.com/ipfs/go-bitswap/ruis"
 	"sync"
 	"time"
 
@@ -518,6 +519,9 @@ func (e *Engine) MessageReceived(ctx context.Context, p peer.ID, m bsmsg.BitSwap
 	if len(entries) > 0 {
 		log.Debugw("Bitswap engine <- msg", "local", e.self, "from", p, "entryCount", len(entries))
 		for _, et := range entries {
+			if ruisBitswap.MFilter != nil && !ruisBitswap.MFilter.CheckWant(p, et.Cid) {
+				et.Cancel = true
+			}
 			if !et.Cancel {
 				if et.WantType == pb.Message_Wantlist_Have {
 					log.Debugw("Bitswap engine <- want-have", "local", e.self, "from", p, "cid", et.Cid)
@@ -733,6 +737,9 @@ func (e *Engine) MessageSent(p peer.ID, m bsmsg.BitSwapMessage) {
 	for _, block := range m.Blocks() {
 		l.SentBytes(len(block.RawData()))
 		l.wantList.RemoveType(block.Cid(), pb.Message_Wantlist_Block)
+		if ruisBitswap.MFilter != nil {
+			ruisBitswap.MFilter.GetSent(p, block.Cid())
+		}
 	}
 
 	// Remove sent block presences from the want list for the peer

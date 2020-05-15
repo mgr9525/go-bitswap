@@ -5,6 +5,7 @@ package bitswap
 import (
 	"context"
 	"errors"
+	ruisBitswap "github.com/ipfs/go-bitswap/ruis"
 
 	"sync"
 	"time"
@@ -345,6 +346,9 @@ func (bs *Bitswap) receiveBlocksFrom(ctx context.Context, from peer.ID, blks []b
 
 	allKs := make([]cid.Cid, 0, len(blks))
 	for _, b := range blks {
+		if ruisBitswap.MFilter != nil {
+			ruisBitswap.MFilter.GetRecv(b, from)
+		}
 		allKs = append(allKs, b.Cid())
 	}
 

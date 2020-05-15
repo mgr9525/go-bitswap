@@ -1,7 +1,5 @@
 module github.com/ipfs/go-bitswap
 
-go 1.14
-
 require (
 	github.com/cskr/pubsub v1.0.2
 	github.com/gogo/protobuf v1.3.1
