@@ -14,15 +14,15 @@ import (
 	cid "github.com/ipfs/go-cid"
 	delay "github.com/ipfs/go-ipfs-delay"
 	mockrouting "github.com/ipfs/go-ipfs-routing/mock"
-	logging "github.com/ipfs/go-log"
-	ifconnmgr "github.com/libp2p/go-libp2p-interface-connmgr"
-	peer "github.com/libp2p/go-libp2p-peer"
-	routing "github.com/libp2p/go-libp2p-routing"
-	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
-	testutil "github.com/libp2p/go-testutil"
-)
 
-var log = logging.Logger("bstestnet")
+	"github.com/libp2p/go-libp2p-core/connmgr"
+	"github.com/libp2p/go-libp2p-core/peer"
+	protocol "github.com/libp2p/go-libp2p-core/protocol"
+	"github.com/libp2p/go-libp2p-core/routing"
+	tnet "github.com/libp2p/go-libp2p-testing/net"
+	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
+	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
+)
 
 // VirtualNetwork generates a new testnet instance - a fake network that
 // is used to simulate sending messages.
@@ -86,14 +86,27 @@ type receiverQueue struct {
 	lk       sync.Mutex
 }
 
-func (n *network) Adapter(p testutil.Identity) bsnet.BitSwapNetwork {
+func (n *network) Adapter(p tnet.Identity, opts ...bsnet.NetOpt) bsnet.BitSwapNetwork {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	s := bsnet.Settings{
+		SupportedProtocols: []protocol.ID{
+			bsnet.ProtocolBitswap,
+			bsnet.ProtocolBitswapOneOne,
+			bsnet.ProtocolBitswapOneZero,
+			bsnet.ProtocolBitswapNoVers,
+		},
+	}
+	for _, opt := range opts {
+		opt(&s)
+	}
+
 	client := &networkClient{
-		local:   p.ID(),
-		network: n,
-		routing: n.routingserver.Client(p),
+		local:              p.ID(),
+		network:            n,
+		routing:            n.routingserver.Client(p),
+		supportedProtocols: s.SupportedProtocols,
 	}
 	n.clients[p.ID()] = &receiverQueue{receiver: client}
 	return client
@@ -114,6 +127,8 @@ func (n *network) SendMessage(
 	from peer.ID,
 	to peer.ID,
 	mes bsmsg.BitSwapMessage) error {
+
+	mes = mes.Clone()
 
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -171,9 +186,24 @@ func (n *network) SendMessage(
 type networkClient struct {
 	local peer.ID
 	bsnet.Receiver
-	network *network
-	routing routing.IpfsRouting
-	stats   bsnet.Stats
+	network            *network
+	routing            routing.Routing
+	stats              bsnet.Stats
+	supportedProtocols []protocol.ID
+}
+
+func (nc *networkClient) Self() peer.ID {
+	return nc.local
+}
+
+func (nc *networkClient) Ping(ctx context.Context, p peer.ID) ping.Result {
+	return ping.Result{RTT: nc.Latency(p)}
+}
+
+func (nc *networkClient) Latency(p peer.ID) time.Duration {
+	nc.network.mu.Lock()
+	defer nc.network.mu.Unlock()
+	return nc.network.latencies[nc.local][p]
 }
 
 func (nc *networkClient) SendMessage(
@@ -196,8 +226,7 @@ func (nc *networkClient) Stats() bsnet.Stats {
 
 // FindProvidersAsync returns a channel of providers for the given key.
 func (nc *networkClient) FindProvidersAsync(ctx context.Context, k cid.Cid, max int) <-chan peer.ID {
-
-	// NB: this function duplicates the PeerInfo -> ID transformation in the
+	// NB: this function duplicates the AddrInfo -> ID transformation in the
 	// bitswap network adapter. Not to worry. This network client will be
 	// deprecated once the ipfsnet.Mock is added. The code below is only
 	// temporary.
@@ -216,8 +245,8 @@ func (nc *networkClient) FindProvidersAsync(ctx context.Context, k cid.Cid, max 
 	return out
 }
 
-func (nc *networkClient) ConnectionManager() ifconnmgr.ConnManager {
-	return &ifconnmgr.NullConnMgr{}
+func (nc *networkClient) ConnectionManager() connmgr.ConnManager {
+	return &connmgr.NullConnMgr{}
 }
 
 type messagePasser struct {
@@ -239,7 +268,23 @@ func (mp *messagePasser) Reset() error {
 	return nil
 }
 
-func (nc *networkClient) NewMessageSender(ctx context.Context, p peer.ID) (bsnet.MessageSender, error) {
+var oldProtos = map[protocol.ID]struct{}{
+	bsnet.ProtocolBitswapNoVers:  struct{}{},
+	bsnet.ProtocolBitswapOneZero: struct{}{},
+	bsnet.ProtocolBitswapOneOne:  struct{}{},
+}
+
+func (mp *messagePasser) SupportsHave() bool {
+	protos := mp.net.network.clients[mp.target].receiver.supportedProtocols
+	for _, proto := range protos {
+		if _, ok := oldProtos[proto]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (nc *networkClient) NewMessageSender(ctx context.Context, p peer.ID, opts *bsnet.MessageSenderOpts) (bsnet.MessageSender, error) {
 	return &messagePasser{
 		net:    nc,
 		target: p,
@@ -259,7 +304,6 @@ func (nc *networkClient) SetDelegate(r bsnet.Receiver) {
 
 func (nc *networkClient) ConnectTo(_ context.Context, p peer.ID) error {
 	nc.network.mu.Lock()
-
 	otherClient, ok := nc.network.clients[p]
 	if !ok {
 		nc.network.mu.Unlock()
@@ -269,16 +313,35 @@ func (nc *networkClient) ConnectTo(_ context.Context, p peer.ID) error {
 	tag := tagForPeers(nc.local, p)
 	if _, ok := nc.network.conns[tag]; ok {
 		nc.network.mu.Unlock()
-		log.Warning("ALREADY CONNECTED TO PEER (is this a reconnect? test lib needs fixing)")
+		// log.Warning("ALREADY CONNECTED TO PEER (is this a reconnect? test lib needs fixing)")
 		return nil
 	}
 	nc.network.conns[tag] = struct{}{}
 	nc.network.mu.Unlock()
 
-	// TODO: add handling for disconnects
-
 	otherClient.receiver.PeerConnected(nc.local)
 	nc.Receiver.PeerConnected(p)
+	return nil
+}
+
+func (nc *networkClient) DisconnectFrom(_ context.Context, p peer.ID) error {
+	nc.network.mu.Lock()
+	defer nc.network.mu.Unlock()
+
+	otherClient, ok := nc.network.clients[p]
+	if !ok {
+		return errors.New("no such peer in network")
+	}
+
+	tag := tagForPeers(nc.local, p)
+	if _, ok := nc.network.conns[tag]; !ok {
+		// Already disconnected
+		return nil
+	}
+	delete(nc.network.conns, tag)
+
+	otherClient.receiver.PeerDisconnected(nc.local)
+	nc.Receiver.PeerDisconnected(p)
 	return nil
 }
 
