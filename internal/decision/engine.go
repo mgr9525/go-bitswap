@@ -516,18 +516,23 @@ func (e *Engine) Peers() []peer.ID {
 func (e *Engine) MessageReceived(ctx context.Context, p peer.ID, m bsmsg.BitSwapMessage) {
 	entries := m.Wantlist()
 
+	rels := make([]bsmsg.Entry, 0)
 	if len(entries) > 0 {
 		log.Debugw("Bitswap engine <- msg", "local", e.self, "from", p, "entryCount", len(entries))
 		for _, et := range entries {
-			if ruisBitswap.MFilter != nil && !ruisBitswap.MFilter.CheckWant(p, et.Cid) {
-				et.Cancel = true
-			}
 			if !et.Cancel {
 				if et.WantType == pb.Message_Wantlist_Have {
 					log.Debugw("Bitswap engine <- want-have", "local", e.self, "from", p, "cid", et.Cid)
 				} else {
 					log.Debugw("Bitswap engine <- want-block", "local", e.self, "from", p, "cid", et.Cid)
 				}
+			}
+			if ruisBitswap.MFilter != nil {
+				if ruisBitswap.MFilter.CheckWant(p, et.Cid) {
+					rels = append(rels, et)
+				}
+			} else {
+				rels = append(rels, et)
 			}
 		}
 	}
@@ -544,7 +549,7 @@ func (e *Engine) MessageReceived(ctx context.Context, p peer.ID, m bsmsg.BitSwap
 	}()
 
 	// Get block sizes
-	wants, cancels := e.splitWantsCancels(entries)
+	wants, cancels := e.splitWantsCancels(rels)
 	wantKs := cid.NewSet()
 	for _, entry := range wants {
 		wantKs.Add(entry.Cid)
