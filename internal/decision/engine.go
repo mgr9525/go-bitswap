@@ -517,7 +517,7 @@ func (e *Engine) MessageReceived(ctx context.Context, p peer.ID, m bsmsg.BitSwap
 	entries := m.Wantlist()
 
 	rels := make([]bsmsg.Entry, 0)
-	cels := make([]bsmsg.Entry, 0)
+	//cels := make([]bsmsg.Entry, 0)
 	if len(entries) > 0 {
 		log.Debugw("Bitswap engine <- msg", "local", e.self, "from", p, "entryCount", len(entries))
 		for _, et := range entries {
@@ -531,10 +531,10 @@ func (e *Engine) MessageReceived(ctx context.Context, p peer.ID, m bsmsg.BitSwap
 			if ruisBitswap.MFilter != nil {
 				if ruisBitswap.MFilter.CheckWant(p, et.Cid) {
 					rels = append(rels, et)
-				} else {
+				} /*else {
 					et.Cancel = true
 					cels = append(cels, et)
-				}
+				}*/
 			} else {
 				rels = append(rels, et)
 			}
@@ -583,7 +583,7 @@ func (e *Engine) MessageReceived(ctx context.Context, p peer.ID, m bsmsg.BitSwap
 
 	var activeEntries []peertask.Task
 
-	cancels = append(cancels, cels...)
+	//cancels = append(cancels, cels...)
 	// Remove cancelled blocks from the queue
 	for _, entry := range cancels {
 		log.Debugw("Bitswap engine <- cancel", "local", e.self, "from", p, "cid", entry.Cid)
